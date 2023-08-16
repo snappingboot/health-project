@@ -1,0 +1,470 @@
+---
+title: "Did the Affordable Care Act reduce job lock and expand self-employment?"
+author: "Julie Miller and Ryan Kurtzman"
+date: "4/20/2022"
+output: beamer_presentation
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+
+```{r}
+library(tidyverse)
+library(stargazer)
+library(kableExtra)
+
+merge_cps <- readRDS("testfile.rds")
+
+important_variables <- merge_cps %>%
+  select(YEAR, CPSID, STATEFIP, HHINCOME, AGE, SEX, RACE, MARST, FAMSIZE, NCHILD, CLASSWKR, EMPSTAT, EDUC, INCWAGE, HEALTH, DISABWRK, INCLUGH, EMCONTRB, COVERGH, COVERPI, CAIDLY, CARELY, HICHAMP, DPOWNLY, TRCCOVLY, JTYEARS, JTYEARAGO, JTCLASS)
+rm(merge_cps, cps_asec, cps_4jan, cps_na_asec)
+
+self_emp_vec <- c(10, 13, 14)
+medicaidex_states <-c(39, 17, 54, 6, 21, 27, 19, 38)
+noexpansion_states <-c(47, 37, 55, 20, 45, 13, 46)
+NILF <- c(0, 29, 99)
+yearvec_before <- c(2008, 2010, 2012)
+yearvec_after <- c(2014, 2016, 2018)
+married_vec <- c(1,2,3)
+FullTime_vec <- c(10,11,12,13,14,15)
+
+Medicaid_experiment <- important_variables %>% 
+  filter(STATEFIP %in% c(39, 17, 54, 21, 27, 19, 38, 47, 48, 37, 55, 20, 45, 13, 46)) %>% 
+  filter(JTYEARAGO != 96) %>% 
+  filter(JTYEARAGO != 97) %>%
+  filter(JTYEARAGO != 98) %>% 
+  filter(JTYEARAGO != 99) %>%
+  filter(MARST != 9) %>% 
+  filter(EDUC != 999) %>% 
+  filter(INCWAGE != 99999999) %>%  	
+  filter(INCWAGE != 99999998) %>% 
+  mutate(medicaidex_states = case_when(STATEFIP %in% medicaidex_states ~ 1, TRUE ~ 0), 
+        noexpansion_states = case_when(STATEFIP %in% noexpansion_states ~ 1, TRUE ~ 0),
+        NILF = case_when(CLASSWKR %in% NILF ~1, TRUE ~ 0),
+        FullTime = case_when(EMPSTAT %in% FullTime_vec~1, TRUE ~ 0))  
+
+num1 <- Medicaid_experiment %>% filter(FullTime==0) %>% count()
+num1 <- as.numeric(num1)
+
+Medicaid_experiment <- Medicaid_experiment %>%
+  filter(FullTime == 1)
+
+Medicaid_experiment_wtf <- important_variables %>% 
+  filter(STATEFIP %in% c(39, 17, 54, 21, 27, 19, 38, 47, 48, 37, 55, 20, 45, 13, 46)) %>% 
+  filter(JTYEARAGO != 96) %>% 
+  filter(JTYEARAGO != 97) %>%
+  filter(JTYEARAGO != 98) %>% 
+  filter(JTYEARAGO != 99) %>%
+  filter(MARST != 9) %>% 
+  filter(EDUC != 999) %>% 
+  filter(INCWAGE != 99999999) %>%  	
+  filter(INCWAGE != 99999998) %>% 
+  mutate(medicaidex_states = case_when(STATEFIP %in% medicaidex_states ~ 1, TRUE ~ 0), 
+        noexpansion_states = case_when(STATEFIP %in% noexpansion_states ~ 1, TRUE ~ 0),
+        NILF = case_when(CLASSWKR %in% NILF ~1, TRUE ~ 0))
+
+temp <- Medicaid_experiment %>%
+  select(-CPSID) %>%
+  mutate(self_emp = case_when(CLASSWKR == 10 ~ 1, CLASSWKR == 13 ~ 1, CLASSWKR == 14 ~ 1, TRUE ~ 0)) 
+
+#self_emp_temp <- temp %>%
+#  filter(self_emp==1) %>%
+#  select(HHINCOME, AGE, MARST, FAMSIZE, NCHILD, HEALTH, CAIDLY)
+
+
+dummy_assign <- Medicaid_experiment %>%
+  select(-CPSID) %>%
+  mutate(self_emp = case_when(CLASSWKR %in% self_emp_vec ~ 1, TRUE ~ 0),
+          medicaid = case_when(CAIDLY == 2 ~ 1, TRUE ~ 0),
+          married =case_when(MARST %in% married_vec ~ 1, TRUE ~ 0),
+          before_aca = case_when(YEAR %in% yearvec_before ~ 1, TRUE ~ 0),
+          after_aca = case_when(YEAR %in% yearvec_after~ 1, TRUE ~ 0))
+
+stats_table <- dummy_assign %>%
+  select(HHINCOME, AGE, FAMSIZE, NCHILD, HEALTH, self_emp, medicaid, married)
+```
+
+
+## Outline
+
+```{=tex}
+\begin{enumerate}[I]
+\item  
+
+            Introduction
+
+\item 
+
+            Background
+
+\item 
+
+            Research Question
+
+\item 
+
+            Data
+
+\item  
+
+            Empirical Model
+
+\item 
+
+            Results
+\end{enumerate}
+```
+## Introduction
+
+-   The purpose of this analysis is to evaluate:
+
+    -   Affordable Care Act Medicaid Expansion on Health Insurance Job Lock Self-Employment
+
+        -   Diff in Diff using CPS data from 2008 to 2018
+        -   Result: Yes: There is evidence of health insurance job lock relief.
+
+-   What is Health Insurance Job Lock?
+
+    -   The reduction in worker job mobility from perceived risk of losing health coverage
+
+-   Why should we care?
+
+    -   Free labor mobility enables workers to choose better financial outcomes
+    -   Optimal skill match
+    -   Higher productivity
+    -   Increased labor supply
+
+## Background: ACA Medicaid Expansion
+
+- Affordable Care Act (ACA) signed in 2010, early Medicaid Expansion implementation in 2014 
+  + Medicaid income eligibility set at 138% Federal Poverty Line
+    + For individuals: $12,490 in 2019
+    + Families: $21,330 for family of three
+
+```{=tex}
+\begin{columns}
+
+\begin{column}{.45\textwidth}
+\begin{figure}
+   \includegraphics[width=.9\textwidth]{"PieChart2008.jpg"}
+   \caption{Percentages by insurance category, 2008}
+\end{figure}
+\end{column}
+\hfill
+\begin{column}{.45\textwidth}
+\begin{figure}
+   \includegraphics[width=.9\textwidth]{"PieChart20018.jpg"}
+   \caption{Percentages by insurance category, 2018}
+\end{figure}
+\end{column}
+
+\end{columns}
+```
+
+## States Divided
+
+\begin{columns}
+
+\begin{column}{0.45\textwidth}
+\begin{itemize}
+\item States were divided on Medicaid expansion adoption:  opportunity for natural experiment
+\item 8 states that implemented expansion in 2014 
+\item 8 states that never adopted expansion
+\end{itemize}
+\end{column}
+
+\begin{column}{0.6\textwidth}
+\begin{figure}
+\caption{}
+\includegraphics[width=\columnwidth]{"map_picture.jpg"}
+
+\end{figure}
+\end{column}
+
+\end{columns}
+
+## Research Question and Knowledge Gap
+
+- Is there evidence of health insurance job lock among self-employed workers and 
+- Is there evidence that the ACA Medicaid expansion alleviated job lock for low-income self-employed workers?
+
+Data
+
+- Integrated Public Use Microdata Series (IPUMS) compilation of the Current Population Survey (CPS): 
+  + Employee Tenure and Occupational Mobility Supplement (January)
+    + Job Tenure & Occupational detail
+- Annual Social and Economic Supplement (ASEC) (March)
+  + Health Insurance source
+  + Household Demographic Characteristics
+
+- Years: biennial (2008, 2010, 2012, 2014, 2016, 2018)
+- Removed NILF, part-time workers and unemployed
+
+## Summary Statistics:
+
+\begin{columns}
+
+\begin{column}{.47\textwidth}
+\begin{small}
+\begin{itemize}
+\item Self-employed workers include
+  \begin{itemize}
+  \item freelance workers,
+  \item entrepreneurs, and
+  \item workers with alternative work arrangements
+  \end{itemize}
+
+\item Self-employed workers
+  \begin{itemize}
+  \item Tend to be older
+  \item Male
+  \item Smaller family size
+  \item More likely to be married
+  \end{itemize}
+  
+\end{itemize}
+\end{small}
+\end{column}
+
+\begin{column}{.5\textwidth}
+```{r results = 'asis'}
+stargazer(as.data.frame(stats_table), title = "Summary Statistics", header = FALSE, font.size = "tiny", column.sep.width = "-10pt")
+```
+\end{column}
+
+\end{columns}
+
+## Trends in Self Employment & Medicaid Participation
+```{r include = FALSE}
+temp <- Medicaid_experiment %>%
+  select(-CPSID) %>%
+  mutate(self_emp = case_when(CLASSWKR == 10 ~ 1, CLASSWKR == 13 ~ 1, CLASSWKR == 14 ~ 1, TRUE ~ 0)) %>%
+  filter(CAIDLY == 2 & NILF!= 1 & FullTime == 1| CAIDLY == 1 & NILF != 1 & FullTime == 1) %>%
+  filter(medicaidex_states == 1) %>% 
+  mutate(medicaid = case_when(CAIDLY == 1 ~ 0, CAIDLY == 2 ~ 1)) %>%  
+  group_by(YEAR, self_emp, medicaidex_states) %>%
+  mutate(tot_medicaid = sum(medicaid), tot_self = sum(self_emp==1), tot_n_self = sum(self_emp==0)) %>%
+  summarize(medicaid_per = case_when(self_emp == 1 ~ tot_medicaid/tot_self, self_emp == 0 ~ tot_medicaid/tot_n_self)) %>%
+  mutate(self_emp = factor(self_emp)) %>%
+  distinct()
+
+ggplot(temp, aes(x = YEAR, y = medicaid_per, color = self_emp))+
+  geom_point()+
+  geom_line() +
+  geom_vline(aes(xintercept = 2014), linetype = "dashed")+
+  geom_text(aes(x=2014, label="Medicaid Expansion", y=.025), color = "black")+
+  labs(title = "Figure 4 \nProportion of Workers on Medicaid in Medicaid Expansion States, \nSelf-employed vs. Not self-employed", y = "Proportion on Medicaid", x = "Year", color = "Self Employed")+
+  scale_color_manual(labels = c("No", "Yes"), values = c("red", "blue"))
+ggsave("plot1.png", device = "png")
+
+temp <- Medicaid_experiment %>%
+  select(-CPSID) %>%
+  mutate(self_emp = case_when(CLASSWKR == 10 ~ 1, CLASSWKR == 13 ~ 1, CLASSWKR == 14 ~ 1, TRUE ~ 0)) %>%
+  filter(CAIDLY == 2 & NILF!= 1 & FullTime==1 | CAIDLY == 1 & NILF != 1 & FullTime ==1) %>%
+  filter(medicaidex_states != 1) %>% 
+  mutate(medicaid = case_when(CAIDLY == 1 ~ 0, CAIDLY == 2 ~ 1)) %>%  
+  group_by(YEAR, self_emp, medicaidex_states) %>%
+  mutate(tot_medicaid = sum(medicaid), tot_self = sum(self_emp==1), tot_n_self = sum(self_emp==0)) %>%
+  summarize(medicaid_per = case_when(self_emp == 1 ~ tot_medicaid/tot_self, self_emp == 0 ~ tot_medicaid/tot_n_self)) %>%
+  mutate(self_emp = factor(self_emp)) %>%
+  distinct()
+
+ggplot(temp, aes(x = YEAR, y = medicaid_per, color = self_emp))+
+  geom_point()+
+  geom_line() +
+  geom_vline(aes(xintercept = 2014), linetype = "dashed")+
+  labs(title = "Figure 5 \nProportion of Workers on Medicaid in No Expansion States, \nSelf-employed vs. Not self-employed", y = "Proportion on Medicaid", x = "Year", color = "Self Employed")+
+  scale_color_manual(labels = c("No", "Yes"), values = c("red", "blue"))
+ggsave("plot2.png", device = "png")
+
+temp <- Medicaid_experiment %>%
+  select(-CPSID) %>%
+  mutate(self_emp = case_when(CLASSWKR == 10 ~ 1, CLASSWKR == 13 ~ 1, CLASSWKR == 14 ~ 1, TRUE ~ 0)) %>%
+  filter(CAIDLY == 2 & NILF!= 1 & FullTime==1| CAIDLY == 1 & NILF != 1 & FullTime==1) %>%
+  filter(self_emp == 1) %>% 
+  mutate(medicaid = case_when(CAIDLY == 1 ~ 0, CAIDLY == 2 ~ 1)) %>%
+  group_by(YEAR, medicaidex_states) %>%
+  mutate(tot_medicaid = sum(medicaid), tot_med = sum(medicaidex_states==1), tot_n_med = sum(medicaidex_states!=1)) %>%
+  summarize(medicaid_per = case_when(medicaidex_states == 1 ~ tot_medicaid/tot_med, medicaidex_states == 0 ~ tot_medicaid/tot_n_med)) %>%
+  mutate(medicaidex_states = factor(medicaidex_states)) %>%
+  distinct()
+
+ggplot(temp, aes(x = YEAR, y = medicaid_per, color = medicaidex_states))+
+  geom_point()+
+  geom_line() +
+  geom_vline(aes(xintercept = 2014), linetype = "dashed")+
+  labs(title = "Figure 6 \nProportion of Self-Employed Workers on Medicaid \nExpansion States vs. No Expansion States", y = "Proportion on Medicaid", x = "Year", color = "Expansion State")+
+  scale_color_manual(labels = c("No", "Yes"), values = c("purple", "darkgreen"))
+ggsave("plot3.png", device = "png")
+
+temp <- Medicaid_experiment %>%
+  select(-CPSID) %>%
+  mutate(self_emp = case_when(CLASSWKR == 10 ~ 1, CLASSWKR == 13 ~ 1, CLASSWKR == 14 ~ 1, TRUE ~ 0)) %>%
+  filter(CAIDLY == 2 & NILF!= 1 & FullTime ==1 | CAIDLY == 1 & NILF != 1 & FullTime==1) %>%
+  filter(self_emp == 0) %>% 
+  mutate(medicaid = case_when(CAIDLY == 1 ~ 0, CAIDLY == 2 ~ 1)) %>%
+  group_by(YEAR, medicaidex_states) %>%
+  mutate(tot_medicaid = sum(medicaid), tot_med = sum(medicaidex_states==1), tot_n_med = sum(medicaidex_states!=1)) %>%
+  summarize(medicaid_per = case_when(medicaidex_states == 1 ~ tot_medicaid/tot_med, medicaidex_states == 0 ~ tot_medicaid/tot_n_med)) %>%
+  mutate(medicaidex_states = factor(medicaidex_states)) %>%
+  distinct()
+
+ggplot(temp, aes(x = YEAR, y = medicaid_per, color = medicaidex_states))+
+  geom_point()+
+  geom_line() +
+  geom_vline(aes(xintercept = 2014), linetype = "dashed")+
+  labs(title = "Figure 7 \nProportion of non Self-Employed Workers on Medicaid \nExpansion States vs. No Expansion States", y = "Proportion on Medicaid", x = "Year", color = "Expansion State")+
+  scale_color_manual(labels = c("No", "Yes"), values = c("purple", "darkgreen"))
+ggsave("plot4.png", device = "png")
+```
+
+\begin{columns}
+
+\begin{column}{0.45\textwidth}
+\includegraphics[width=\columnwidth]{"plot1.png"}
+\includegraphics[width=\columnwidth]{"plot3.png"}
+\end{column}
+
+\begin{column}{0.45\textwidth}
+\vspace{\topsep}
+
+\includegraphics[width=\columnwidth]{"plot2.png"}
+\includegraphics[width=\columnwidth]{"plot4.png"}
+\end{column}
+
+\begin{column}{.25\textwidth}
+\begin{tiny}
+
+Self employed workers use Medicaid proportionally less than the other workers, but there are clearly economic trends that influence participation.
+
+\end{tiny}
+\end{column}
+
+\end{columns}
+
+
+## Empirical Model
+
+
+- A difference-in-difference approach, with 2014 as the policy implementation year. 
+  + After-ACA-implementation period is interacted with the Medicaid expansion state dummy to capture the difference between year segments across state groups.
+  
+Equation 1: DD regression
+\begin{footnotesize}
+$Self-Employment_{i,s,t} = \alpha + \beta_1(After \hspace{1mm} ACA)_t + \beta_2(Expansion \hspace{1mm} State)_{i,s} + \beta_3(After*Expansion)_{i,s,t} + \delta X_{i,t} +\varepsilon_{i,s,t}$
+\end{footnotesize}
+\boldmath
+\begin{small}
+\begin{itemize}
+  \item \textbf{Medicaid Expansion States}, a dummy variable that identifies the eight states that 	implemented Medicaid expansion policies in 2014;
+  \item \textbf{After ACA}, a dummy variable that captures the years following the implementation of 	Medicaid expansion (2014 through 2018); and
+  \item $X_{i,t}$, a vector of demographic characteristics including age, sex, education level, number of 	children present in household, self-rated health status, Medicaid participation, and a marital 	status dummy.
+\end{itemize}
+\end{small}
+\unboldmath
+
+## Empirical Model Cont.
+
+Equation 2: Fixed Effects for State and Year to adjust for economic factors
+\begin{footnotesize}
+$Self-Employment_{i,s,t} = \alpha + \gamma_t + \lambda_s + \beta_1(After \hspace{1mm} ACA)_t + \beta_2(Expansion \hspace{1mm} State)_{i,s} + \beta_3(After*Expansion)_{i,s,t} + \delta X_{i,t} +e_{i,s,t}$
+\end{footnotesize}
+- $\gamma_t$ for year and $\lambda_s$ for state
+
+## Results
+
+\begin{columns}
+
+\begin{column}{.45\textwidth}
+\vskip-3em
+\begin{itemize}
+\item The interaction of After ACA and Expansion states shows a small but significant relationship in self-employment 
+  \begin{itemize}
+  \begin{tiny}
+  \item 0.2\% of self employment has increased as a result of Medicaid expansion – evidence of job lock alleviation
+  \item Age and Marriage are positively related to self employment – Marriage Lock? 
+  
+  \item Family Size inversely related with Self-employment – Job lock, but what kind? 
+  \item Fixed effects increased the $R^2$, had no effect on the analytical coefficients
+  
+  \end{tiny}
+  \end{itemize}
+\end{itemize}
+\end{column}
+
+\begin{column}{.6\textwidth}
+\begin{tiny}
+```{r results = 'asis'}
+resizebox.stargazer = function(..., tab.width = "!", tab.height = "!"
+                               ){
+  #Activate str_which() function:
+  require(stringr) 
+
+  #Extract the code returned from stargazer()
+  res = capture.output(
+    stargazer::stargazer(...)
+    )
+
+  #Render the arguments:
+  tab.width = tab.width
+  tab.height = tab.height
+
+  #Attach "}" between \end{tabular} and \end{table}
+  res = 
+    prepend(res, "}", before = length(res))
+
+  #Input \resizebox before \begin{tabular}
+  res = 
+    c(res[1:str_which(res, "^\\\\begin\\{tabular\\}.*")-1],
+      paste0("\\resizebox{",tab.width,"}{",tab.height,"}{%"),
+      res[str_which(res, "^\\\\begin\\{tabular\\}.*"):length(res)]
+      )
+
+  #Produce the whole strings
+  cat(res, sep = "\n")
+}
+
+model_selfemp_tr <-lm(self_emp~after_aca+medicaidex_states+after_aca*medicaidex_states+AGE+married+NCHILD+FAMSIZE+HEALTH+medicaid, data=dummy_assign)
+
+model_dd_fe <- lm(self_emp~after_aca+medicaidex_states+after_aca*medicaidex_states+AGE+married+NCHILD+FAMSIZE+HEALTH+medicaid+factor(STATEFIP)+factor(YEAR), data=dummy_assign)
+
+resizebox.stargazer(model_selfemp_tr, model_dd_fe, title = "Regression Results", covariate.labels = c("After ACA", "Medicaid Expansion State", "After * Expansion State", "Age", "Married", "Number of Children", "Family Size", "Health", "Medicaid Participant"), dep.var.labels = c("Self Employment"), omit = c("STATEFIP", "YEAR"), header = F, font.size = "tiny", omit.stat = c("f", "ser"), tab.width = "0.75\\textwidth", tab.height = "0.5\\textwidth")
+
+```
+
+\hspace{8mm} Each entry represents OLS coefficients with standard errors 
+
+\hspace{8mm} in parentheses. Column 1 shows coefficients for the normal 
+ 
+\hspace{8mm} DD equation, column 2 includes state and year fixed effects. 
+
+\end{tiny}
+\end{column}
+
+\end{columns}
+
+
+## Limitations & Future Work
+- Future work:
+  + Additional work narrowing the population sample (age, income group) and expanding the sample size to more states could provide additional insight
+  + Inclusion of job tenure indicators, longitudinal data to get individual effects, primary/secondary job fields identification, occupation or industry, may provide further insight
+
+- Limitations:
+  + We only capture the effect of Medicaid expansion on the self-employed, which limits findings to low-income self-employed.
+  + Marketplace health insurance data may provide more information in the future with other income groups
+    + With marketplace insurance is available for up to 400% the FPL during pandemic years
+    + 31% of Marketplace users are self-employed
+  + Alternative data sources may provide additional insights 
+    + ACS 1-year survey is heavily used by the KFF
+
+
+
+
+
+
+
+
+
