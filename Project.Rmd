@@ -22,6 +22,9 @@ important_variables <- merge_cps %>%
   select(YEAR, CPSID, STATEFIP, HHINCOME, AGE, SEX, RACE, MARST, FAMSIZE, NCHILD, CLASSWKR, EMPSTAT, EDUC, INCWAGE, HEALTH, DISABWRK, INCLUGH, EMCONTRB, COVERGH, COVERPI, CAIDLY, CARELY, HICHAMP, DPOWNLY, TRCCOVLY, JTYEARS, JTYEARAGO, JTCLASS)
 rm(merge_cps, cps_asec, cps_4jan, cps_na_asec)
 
+important_variables <- important_variables %>%
+  mutate(JTYEARAGO = (haven::as_factor(JTYEARAGO)))
+
 self_emp_vec <- c(10, 13, 14)
 medicaidex_states <-c(39, 17, 54, 6, 21, 27, 19, 38)
 noexpansion_states <-c(47, 37, 55, 20, 45, 13, 46)
